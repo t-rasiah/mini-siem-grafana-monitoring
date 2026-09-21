@@ -27,8 +27,10 @@ Vagrant.configure("2") do |config|
       vb.cpus = 2
     end
 
+    # Basis-Provisionierung des Mini-SIEM
     siem.vm.provision "shell", path: "provision/siem.sh"
 
+    # rsyslog-Serverkonfiguration übertragen
     siem.vm.provision "file",
       source: "config/rsyslog-server.conf",
       destination: "/tmp/rsyslog-server.conf"
@@ -37,6 +39,10 @@ Vagrant.configure("2") do |config|
       sudo cp /tmp/rsyslog-server.conf /etc/rsyslog.d/10-remote.conf
       sudo systemctl restart rsyslog
     SHELL
+
+    # Monitoring-Komponenten installieren
+    # Zuerst Loki, später zusätzlich Alloy und Grafana
+    siem.vm.provision "shell", path: "provision/monitoring.sh"
 
   end
 
@@ -60,8 +66,10 @@ Vagrant.configure("2") do |config|
       vb.cpus = 1
     end
 
+    # Basis-Provisionierung des Log-Clients
     client.vm.provision "shell", path: "provision/log-client.sh"
 
+    # rsyslog-Clientkonfiguration übertragen
     client.vm.provision "file",
       source: "config/rsyslog-client.conf",
       destination: "/tmp/rsyslog-client.conf"

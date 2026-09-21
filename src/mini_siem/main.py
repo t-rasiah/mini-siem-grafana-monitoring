@@ -132,7 +132,7 @@ def main():
 
     # Hier liegen die echten SSH-Logs des log-client,
     # die über rsyslog an mini-siem übertragen werden.
-    logfile = "/var/log/remote/log-client/sshd.log"
+    logfile = "/var/log/remote/projekt-log-client/sshd.log"
 
     # Zentrale Konfigurationsdatei für unsere Detection Rules.
     configfile = "/vagrant/config/siem.yaml"

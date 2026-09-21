@@ -1,0 +1,23 @@
+// ============================================================
+// Mini-SIEM - Grafana Alloy
+// ============================================================
+// Liest die Security Alerts des Mini-SIEM und überträgt
+// sie an die lokale Loki-Instanz.
+// ============================================================
+
+loki.source.file "mini_siem_alerts" {
+  targets = [
+    {
+      __path__ = "/var/log/mini-siem/alerts.log",
+      job      = "mini-siem",
+    },
+  ]
+
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://127.0.0.1:3100/loki/api/v1/push"
+  }
+}
