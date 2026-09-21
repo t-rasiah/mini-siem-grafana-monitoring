@@ -1,0 +1,51 @@
+# ============================================================
+# Mini-SIEM Security Log Analyzer
+# Zentrale Konfiguration der Detection Rules
+# ============================================================
+
+rules:
+
+  # ----------------------------------------------------------
+  # Rule 1:
+  # Erkennt mehrere fehlgeschlagene SSH-Anmeldungen
+  # innerhalb eines kurzen Zeitraums.
+  # ----------------------------------------------------------
+  SIEM-SSH-001:
+    enabled: true
+    threshold: 5
+    timeframe_seconds: 60
+    severity: WARNING
+    message: "Multiple failed SSH login attempts detected"
+
+  # ----------------------------------------------------------
+  # Rule 2:
+  # Erkennt einen möglichen SSH-Brute-Force-Angriff.
+  # ----------------------------------------------------------
+  SIEM-SSH-002:
+    enabled: true
+    threshold: 10
+    timeframe_seconds: 300
+    severity: CRITICAL
+    message: "Possible SSH brute-force attack detected"
+
+  # ----------------------------------------------------------
+  # Rule 3:
+  # Erkennt einen SSH-Loginversuch mit einem Benutzer,
+  # der auf dem Zielsystem nicht existiert.
+  # ----------------------------------------------------------
+  SIEM-SSH-003:
+    enabled: true
+    severity: SUSPICIOUS
+    message: "SSH login attempt with invalid user detected"
+
+  # ----------------------------------------------------------
+  # Rule 4:
+  # Erkennt einen erfolgreichen SSH-Login, nachdem von
+  # derselben IP mehrere fehlgeschlagene Versuche kamen.
+  # ----------------------------------------------------------
+  SIEM-SSH-004:
+    enabled: true
+    threshold: 5
+    timeframe_seconds: 300
+    severity: HIGH
+    message: "Successful SSH login after multiple failed attempts"
