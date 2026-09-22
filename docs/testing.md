@@ -2,19 +2,22 @@
 
 ## Ziel
 
-Die Projektumgebung wurde mit automatisierten Tests sowie einem vollständigen End-to-End-Test überprüft.
+Die Projektumgebung wurde mit automatisierten Tests sowie einem vollständigen End-to-End- und Reproduzierbarkeitstest überprüft.
 
 Validiert wurden:
 
+- automatisierter Aufbau der Umgebung
+- Kommunikation zwischen den virtuellen Maschinen
 - zentrale Übertragung der SSH-Logs
 - Erkennung relevanter SSH-Ereignisse durch den Parser
 - Auslösung der definierten Detection Rules
 - persistente Speicherung erzeugter Security Alerts
 - Übertragung der Alerts durch Grafana Alloy
 - Speicherung und Abfrage der Alerts in Loki
-- Visualisierung der Alerts in Grafana
-- automatisierte Provisionierung
-- Funktionsfähigkeit nach einem vollständigen Neuaufbau
+- automatische Provisionierung der Loki-Datenquelle
+- automatische Provisionierung des Grafana-Dashboards
+- Visualisierung der Security Alerts in Grafana
+- reproduzierbarer Aufbau aus einem frischen GitHub-Clone
 
 ## Automatisierte Tests
 
@@ -58,40 +61,67 @@ ssh -o PreferredAuthentications=password \
     testuser@127.0.0.1
 ```
 
-Mehrere fehlgeschlagene Login-Versuche erzeugen entsprechende Einträge im SSH-Log des Log-Clients.
+Durch mehrere fehlgeschlagene Login-Versuche wurden reale SSH-Authentifizierungsereignisse erzeugt.
 
 ### Zentrale Logübertragung
 
-Die SSH-Logs werden über rsyslog an den Mini-SIEM-Server übertragen und dort zentral gespeichert:
+Die SSH-Logs wurden über rsyslog an den Mini-SIEM-Server übertragen und dort zentral gespeichert:
 
 ```text
 /var/log/remote/projekt-log-client/sshd.log
 ```
 
-Damit wird geprüft, dass die zentrale Logübertragung vom `projekt-log-client` zum `projekt-mini-siem` funktioniert.
+Die zentrale Übertragung wurde zusätzlich mit einem eindeutig identifizierbaren Testeintrag überprüft:
+
+```bash
+logger -p auth.info "MINI-SIEM-FINAL-TEST"
+```
+
+Der Eintrag konnte anschliessend auf dem Mini-SIEM unter `/var/log/remote/` nachgewiesen werden.
+
+Damit wurde die tatsächliche Logübertragung zwischen:
+
+```text
+projekt-log-client
+192.168.56.20
+        ↓
+      rsyslog
+        ↓
+projekt-mini-siem
+192.168.56.10
+```
+
+erfolgreich validiert.
 
 ### Detection Engine
 
-Anschliessend wird die Detection Engine auf dem Mini-SIEM ausgeführt:
+Anschliessend wurde die Detection Engine auf dem Mini-SIEM ausgeführt:
 
 ```bash
 cd /vagrant
 python3 src/mini_siem/main.py
 ```
 
-Bei Überschreitung des definierten Schwellwerts wird beispielsweise die Detection Rule `SIEM-SSH-001` ausgelöst.
+Beim finalen End-to-End-Test wurden 12 relevante SSH-Ereignisse verarbeitet.
 
-Der folgende Screenshot zeigt einen durch die Detection Engine erkannten Security Alert:
+Dabei wurden unter anderem folgende Detection Rules ausgelöst:
+
+| Rule ID | Severity | Ergebnis |
+|---|---|---|
+| `SIEM-SSH-001` | WARNING | Mehrere fehlgeschlagene SSH-Anmeldungen erkannt |
+| `SIEM-SSH-002` | CRITICAL | Möglicher SSH-Brute-Force-Angriff erkannt |
+
+Der folgende Screenshot dokumentiert einen durch die Detection Engine erkannten Security Alert:
 
 ![Erkannter Security Alert](screenshots/03-siem-alert.png)
 
-Der erzeugte Alert wird unter folgendem Pfad gespeichert:
+Die erzeugten Alerts werden unter folgendem Pfad gespeichert:
 
 ```text
 /var/log/mini-siem/alerts.log
 ```
 
-Die Alert-Einträge enthalten abhängig von der Detection Rule unter anderem:
+Ein Alert enthält abhängig von der Detection Rule unter anderem:
 
 ```text
 timestamp
@@ -107,15 +137,29 @@ message
 
 Grafana Alloy überwacht die Alert-Datei und überträgt neue Einträge an die lokale Loki-Instanz.
 
-Die in Loki gespeicherten Security Alerts können über Grafana Explore mit LogQL abgefragt werden.
-
-Verwendete Abfrage:
+Die in Loki gespeicherten Security Alerts wurden über Grafana Explore mit folgender LogQL-Abfrage überprüft:
 
 ```logql
 {job="mini-siem"}
 ```
 
-Der folgende Screenshot zeigt die in Loki verfügbaren Mini-SIEM-Alerts:
+Beim finalen End-to-End-Test waren dort die real erzeugten Alerts sichtbar, unter anderem:
+
+```text
+SIEM-SSH-001
+severity=WARNING
+source_ip=127.0.0.1
+```
+
+sowie:
+
+```text
+SIEM-SSH-002
+severity=CRITICAL
+source_ip=127.0.0.1
+```
+
+Der folgende Screenshot zeigt die Abfrage der Mini-SIEM-Alerts über Grafana Explore:
 
 ![Security Alerts in Grafana Explore](screenshots/04-grafana-explore.png)
 
@@ -128,7 +172,11 @@ rsyslog Client
       ↓
 rsyslog Server
       ↓
-Python Mini-SIEM
+zentrale SSH-Logdatei
+      ↓
+Python Parser
+      ↓
+Detection Rules
       ↓
 Security Alert
       ↓
@@ -139,9 +187,27 @@ Loki
 Grafana
 ```
 
+## Grafana Dashboard
+
+Die von Loki bereitgestellten Security Alerts werden im Dashboard `Mini-SIEM Security Monitoring` visualisiert.
+
+Das Dashboard enthält fünf Panels:
+
+1. Total Security Alerts
+2. Alerts by Severity
+3. Alerts by Rule
+4. Alerts by Source IP
+5. Recent Security Alerts
+
+Das Dashboard wird während der Provisionierung automatisch aus der im Repository enthaltenen JSON-Datei bereitgestellt.
+
+Dadurch ist nach einem vollständigen Neuaufbau keine manuelle Erstellung des Dashboards erforderlich.
+
+![Grafana Dashboard](screenshots/05-grafana-dashboard.png)
+
 ## Demo-Daten
 
-Für eine aussagekräftigere Visualisierung des Dashboards steht zusätzlich ein reproduzierbarer Demo-Datengenerator zur Verfügung.
+Für eine aussagekräftige Visualisierung des Dashboards steht zusätzlich ein reproduzierbarer Demo-Datengenerator zur Verfügung.
 
 Das Skript wird auf dem Mini-SIEM mit folgendem Befehl gestartet:
 
@@ -167,62 +233,42 @@ Dabei werden die vier bestehenden Detection Rules verwendet:
 | `SIEM-SSH-003` | SUSPICIOUS | SSH-Anmeldung mit ungültigem Benutzer |
 | `SIEM-SSH-004` | HIGH | Erfolgreiche SSH-Anmeldung nach mehreren Fehlversuchen |
 
-Die Demo-Daten dienen ausschliesslich zur Visualisierung und Demonstration des Dashboards. Sie sind nicht als Nachweis eines realen Angriffs zu interpretieren.
+Die Demo-Daten dienen ausschliesslich zur Demonstration und Visualisierung des Dashboards. Sie sind nicht als Nachweis eines realen Angriffs zu interpretieren.
 
 Der Funktionsnachweis der eigentlichen Detection Pipeline erfolgt separat über den dokumentierten End-to-End-Test mit real erzeugten SSH-Fehlversuchen.
 
-## Grafana Dashboard
+## Reproduzierbarkeitstest
 
-Die von Loki bereitgestellten Security Alerts werden im Dashboard `Mini-SIEM Security Monitoring` visualisiert.
+Zum Abschluss wurde die Reproduzierbarkeit der gesamten Projektumgebung unabhängig vom bestehenden lokalen Arbeitsverzeichnis überprüft.
 
-Das Dashboard enthält fünf Panels:
+Dazu wurden zunächst die bestehenden Projekt-VMs entfernt.
 
-1. Total Security Alerts
-2. Alerts by Severity
-3. Alerts by Rule
-4. Alerts by Source IP
-5. Recent Security Alerts
+Anschliessend wurde das Repository in ein neues Verzeichnis direkt von GitHub geklont.
 
-Dadurch können sowohl einzelne Alert-Einträge als auch aggregierte Informationen zu Severity, Detection Rule und Source IP analysiert werden.
-
-![Grafana Dashboard](screenshots/05-grafana-dashboard.png)
-
-## Reproduzierbarkeit
-
-Vor Abschluss der Projektarbeit wurde ein vollständiger Clean Build durchgeführt.
-
-Dazu wurden die Projekt-VMs entfernt:
-
-```powershell
-vagrant destroy -f
-```
-
-Anschliessend wurde die Umgebung ausschliesslich anhand der im Git-Repository vorhandenen Konfiguration neu aufgebaut:
+Aus diesem frischen Clone wurde die komplette Umgebung ausschliesslich mit folgendem Befehl aufgebaut:
 
 ```powershell
 vagrant up
 ```
 
-Nach dem Neuaufbau wurden erneut überprüft:
+Nach der Provisionierung wurden folgende Punkte überprüft:
 
-- Status der beiden virtuellen Maschinen
-- rsyslog
-- Loki
-- Grafana Alloy
-- Grafana
-- automatisierte Tests
-- zentrale Logübertragung
-- Detection Engine
-- Alert-Übertragung an Loki
-- Grafana-Dashboard
+- beide virtuellen Maschinen wurden erfolgreich erstellt
+- `projekt-mini-siem` war unter `192.168.56.10` erreichbar
+- `projekt-log-client` war unter `192.168.56.20` erreichbar
+- die Kommunikation zwischen beiden Systemen funktionierte
+- rsyslog übertrug Logeinträge zwischen beiden Systemen
+- die automatisierten Tests ergaben `10 passed`
+- reale SSH-Fehlversuche wurden zentral übertragen
+- `SIEM-SSH-001` und `SIEM-SSH-002` wurden ausgelöst
+- die erzeugten Alerts wurden in `alerts.log` gespeichert
+- Grafana Alloy übertrug die Alerts an Loki
+- die Alerts konnten über Grafana Explore abgefragt werden
+- die Loki-Datenquelle wurde automatisch provisioniert
+- das Dashboard `Mini-SIEM Security Monitoring` wurde automatisch provisioniert
+- die Security Alerts wurden im Grafana-Dashboard dargestellt
 
-Das folgende Bild zeigt die laufenden Projekt-VMs:
-
-![Vagrant Status](screenshots/01-vagrant-status.png)
-
-Die Loki-Datenquelle und das Grafana-Dashboard wurden beim Neuaufbau automatisch aus den im Repository enthaltenen Konfigurationsdateien provisioniert.
-
-Damit wurde überprüft, dass die Projektumgebung reproduzierbar aufgebaut werden kann.
+Damit wurde nachgewiesen, dass die Projektumgebung aus den im Git-Repository enthaltenen Dateien reproduzierbar aufgebaut werden kann.
 
 ## Bekannte Einschränkungen
 
@@ -232,6 +278,6 @@ Wird sie mehrfach gegen denselben Logbestand ausgeführt, können bereits verarb
 
 Für den definierten Projektumfang wurde bewusst auf eine persistente Zustandsverwaltung oder zusätzliche Datenbank verzichtet. In einer produktiven SIEM-Implementierung müsste der Verarbeitungsstand beispielsweise über Offsets, Event-IDs oder eine persistente Zustandsverwaltung nachvollzogen werden.
 
-Der Demo-Datengenerator schreibt synthetische Security Alerts ebenfalls in `/var/log/mini-siem/alerts.log`. Wird das Skript mehrfach ausgeführt, werden entsprechend weitere Demo-Alerts angehängt. Dies erklärt beispielsweise eine Alert-Anzahl von mehr als 120 Einträgen im Dashboard.
+Der Demo-Datengenerator schreibt synthetische Security Alerts ebenfalls in `/var/log/mini-siem/alerts.log`. Wird das Skript mehrfach ausgeführt, werden entsprechend weitere Demo-Alerts angehängt.
 
-Die Demo-Daten dienen ausschliesslich der Demonstration und Visualisierung. Reale und synthetische Alerts werden in der aktuellen Implementierung nicht durch ein zusätzliches Herkunftslabel getrennt. Für den Projektumfang ist dies akzeptabel, da der reale End-to-End-Test separat dokumentiert und nachvollziehbar durchgeführt wurde.
+Reale und synthetische Alerts werden in der aktuellen Implementierung nicht durch ein zusätzliches Herkunftslabel getrennt. Der reale End-to-End-Test wurde deshalb separat durchgeführt und dokumentiert, bevor die Demo-Daten für die vollständige Dashboard-Visualisierung verwendet wurden.
