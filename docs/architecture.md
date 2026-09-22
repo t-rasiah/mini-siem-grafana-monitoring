@@ -2,21 +2,17 @@
 
 ## Übersicht
 
-Die Projektarbeit erweitert ein bestehendes Python-basiertes Mini-SIEM um eine zentrale Monitoring- und Visualisierungspipeline.
+Das bestehende Python-basierte Mini-SIEM wird um eine zentrale Log- und Monitoring-Pipeline erweitert.
 
-Die Umgebung besteht aus zwei virtuellen Debian-Systemen. Der `projekt-log-client` erzeugt SSH-Logs und überträgt diese über rsyslog an den zentralen `projekt-mini-siem`.
+Die Umgebung besteht aus zwei virtuellen Debian-Systemen. Der `projekt-log-client` erzeugt SSH-Authentifizierungsereignisse und überträgt diese mit rsyslog an den `projekt-mini-siem`. Dort analysiert die Python-basierte Detection Engine die zentral gesammelten SSH-Logs und erzeugt strukturierte Security Alerts.
 
-Auf dem Mini-SIEM-Server analysiert eine Python-basierte Detection Engine die zentral gesammelten SSH-Ereignisse. Erkannte Security Events werden als strukturierte Alerts gespeichert.
-
-Grafana Alloy überwacht die Alert-Datei und überträgt neue Einträge an Loki. Grafana verwendet Loki als Datenquelle und stellt die Security Alerts über LogQL in einem zentralen Dashboard dar.
+Grafana Alloy überträgt diese Alerts an Loki. Grafana verwendet Loki als Datenquelle und visualisiert die Security Alerts über LogQL-Abfragen.
 
 ## Systemarchitektur
 
-Die folgende Abbildung zeigt die beteiligten Systeme und Komponenten.
+Die folgende Abbildung zeigt die beteiligten Systeme und Komponenten:
 
 ![Systemarchitektur des Mini-SIEM](screenshots/02-systemarchitektur.png)
-
-## Virtuelle Maschinen
 
 Die Projektumgebung besteht aus zwei virtuellen Maschinen:
 
@@ -25,116 +21,128 @@ Die Projektumgebung besteht aus zwei virtuellen Maschinen:
 | `projekt-mini-siem` | `192.168.56.10` | rsyslog Server, Python Mini-SIEM, Grafana Alloy, Loki, Grafana |
 | `projekt-log-client` | `192.168.56.20` | SSH-Server, rsyslog Client |
 
-Die virtuellen Maschinen werden mit Vagrant und VirtualBox erstellt. Als Betriebssystem wird Debian Bookworm verwendet.
-
-Die Trennung in zwei Systeme ermöglicht es, die Logerzeugung und die zentrale Verarbeitung voneinander zu separieren und die Logübertragung zwischen unterschiedlichen Hosts zu testen.
+Die virtuellen Maschinen werden mit Vagrant und VirtualBox auf Basis von Debian Bookworm betrieben. Für die Kommunikation zwischen den Projekt-VMs wird das private Netzwerk `192.168.56.0/24` verwendet.
 
 ## Zentrale Logübertragung
 
-Der `projekt-log-client` erzeugt unter anderem SSH-Authentifizierungsereignisse.
+Der `projekt-log-client` überträgt relevante Logs mit rsyslog über UDP Port 514 an den Mini-SIEM-Server.
 
-rsyslog überträgt die relevanten Logs über das interne Lab-Netzwerk an den Mini-SIEM-Server. Die konfigurierte Logübertragung verwendet UDP auf Port `514`.
+Die Konfiguration befindet sich unter:
 
-Die empfangenen Logs werden auf dem Mini-SIEM nach Hostname und Programm gespeichert.
+```text
+config/rsyslog-client.conf
+config/rsyslog-server.conf
+```
 
-Für die SSH-Logs des Log-Clients wird beispielsweise folgende Datei verwendet:
+Die empfangenen Logs werden auf dem Mini-SIEM nach Hostname und Programm abgelegt. Die SSH-Logs des Log-Clients befinden sich unter:
 
 ```text
 /var/log/remote/projekt-log-client/sshd.log
 ```
 
-Dadurch kann die Detection Engine die zentral gesammelten SSH-Ereignisse unabhängig vom ursprünglichen System analysieren.
+Damit steht der Detection Engine eine zentrale Quelle für die Analyse der SSH-Ereignisse zur Verfügung.
 
 ## Python Mini-SIEM
 
-Das Mini-SIEM besteht aus einem SSH-Parser und einer regelbasierten Detection Engine.
+Das Python Mini-SIEM übernimmt Parsing und regelbasierte Erkennung sicherheitsrelevanter SSH-Ereignisse.
 
-Der Parser erkennt relevante SSH-Ereignisse und wandelt sie in eine strukturierte Form um. Die Detection Engine wertet diese Events anschliessend anhand definierter Security-Regeln aus.
+Der Parser liest die zentral gespeicherten SSH-Logs und überführt relevante Ereignisse in eine strukturierte Form. Die Detection Engine wertet diese Events anschliessend anhand der konfigurierten Detection Rules aus.
+
+Die Python-Komponenten und die zugehörige Konfiguration befinden sich unter:
+
+```text
+src/mini_siem/
+config/siem.yaml
+```
 
 Folgende Detection Rules sind implementiert:
 
-| Rule ID | Severity | Beschreibung |
+| Rule ID | Severity | Erkennung |
 |---|---|---|
 | `SIEM-SSH-001` | WARNING | Mehrere fehlgeschlagene SSH-Anmeldungen |
 | `SIEM-SSH-002` | CRITICAL | Möglicher SSH-Brute-Force-Angriff |
 | `SIEM-SSH-003` | SUSPICIOUS | SSH-Anmeldung mit ungültigem Benutzer |
 | `SIEM-SSH-004` | HIGH | Erfolgreiche SSH-Anmeldung nach mehreren Fehlversuchen |
 
-Erkannte Security Alerts werden unter folgendem Pfad gespeichert:
+Erkannte Security Events werden als strukturierte Alerts unter folgendem Pfad gespeichert:
 
 ```text
 /var/log/mini-siem/alerts.log
-```
-
-Ein Alert enthält abhängig von der Detection Rule unter anderem folgende Informationen:
-
-```text
-timestamp
-rule_id
-severity
-source_ip
-attempts
-username
-message
 ```
 
 Beispiel:
 
 ```text
-timestamp=... | rule_id=SIEM-SSH-001 | severity=WARNING | source_ip=... | attempts=6 | message=...
+timestamp=... | rule_id=SIEM-SSH-001 | severity=WARNING | source_ip=127.0.0.1 | attempts=6 | message=Multiple failed SSH login attempts detected
 ```
 
 ## Grafana Alloy
 
-Grafana Alloy bildet die Schnittstelle zwischen der Detection Engine und Loki.
-
-Alloy überwacht:
+Grafana Alloy überwacht die Alert-Datei:
 
 ```text
 /var/log/mini-siem/alerts.log
 ```
 
-Die Security Alerts werden mit folgendem Job-Label versehen:
+Neue Einträge werden mit dem Job-Label:
 
 ```text
 job="mini-siem"
 ```
 
-Anschliessend werden neue Logeinträge an die lokale Loki-Instanz übertragen.
+an die lokale Loki-Instanz übertragen.
 
-Die Alloy-Konfiguration befindet sich im Repository unter:
+Die Konfiguration befindet sich unter:
 
 ```text
 config/alloy/config.alloy
 ```
 
-Die Detection Engine besitzt dadurch keine direkte Abhängigkeit zu Loki oder Grafana.
-
-## Loki
-
-Loki dient als zentraler Logspeicher für die vom Mini-SIEM erzeugten Security Alerts.
-
-Grafana Alloy überträgt die Alert-Einträge an:
+Die Übertragung erfolgt über den lokalen Loki-Endpunkt:
 
 ```text
-http://127.0.0.1:3100
+http://127.0.0.1:3100/loki/api/v1/push
 ```
 
-Grafana verwendet Loki anschliessend als automatisch provisionierte Datenquelle.
+Die Detection Engine bleibt dadurch unabhängig von Loki und Grafana. Ihre Aufgabe endet mit der Erzeugung der strukturierten Alert-Datei.
 
-Die Auswertung erfolgt mit LogQL. Strukturierte Informationen wie `severity`, `rule_id` und `source_ip` werden bei den entsprechenden Dashboard-Abfragen aus den Alert-Zeilen extrahiert.
+## Loki und LogQL
+
+Loki speichert die von Grafana Alloy übertragenen Security Alerts und stellt sie für Abfragen durch Grafana bereit.
+
+Die grundlegende LogQL-Abfrage für die Mini-SIEM-Alerts lautet:
+
+```logql
+{job="mini-siem"}
+```
+
+Strukturierte Informationen wie `severity`, `rule_id` oder `source_ip` werden zur Abfragezeit aus den Alert-Zeilen extrahiert.
+
+Beispiel für die Auswertung nach Severity:
+
+```logql
+sum by (severity) (
+  count_over_time(
+    {job="mini-siem"}
+    | regexp "severity=(?P<severity>[^ |]+)"
+    [$__range]
+  )
+)
+```
+
+Damit können die erzeugten Alerts ohne zusätzliche Datenbank für die Visualisierung ausgewertet werden.
 
 ## Grafana
 
-Grafana übernimmt die Visualisierung und Auswertung der in Loki gespeicherten Security Alerts.
+Grafana verwendet Loki als automatisch provisionierte Datenquelle.
 
-Das Dashboard trägt den Namen:
+Die Konfiguration befindet sich unter:
 
 ```text
-Mini-SIEM Security Monitoring
+config/grafana/provisioning/datasources/loki.yml
 ```
 
-Es enthält fünf zentrale Panels:
+Das Dashboard `Mini-SIEM Security Monitoring` enthält fünf Panels:
 
 1. Total Security Alerts
 2. Alerts by Severity
@@ -142,62 +150,29 @@ Es enthält fünf zentrale Panels:
 4. Alerts by Source IP
 5. Recent Security Alerts
 
-Damit können sowohl die Gesamtzahl der Security Alerts als auch deren Severity-Stufen, Detection Rules und beteiligte Source-IPs ausgewertet werden.
-
 ![Grafana Dashboard](screenshots/05-grafana-dashboard.png)
+
+Das Dashboard selbst sowie dessen Provisionierung befinden sich unter:
+
+```text
+config/grafana/dashboards/mini-siem-security-monitoring.json
+config/grafana/provisioning/dashboards/mini-siem.yml
+```
 
 ## Architekturentscheidungen
 
-Die Architektur wurde bewusst modular aufgebaut. Die Komponenten besitzen klar getrennte Verantwortlichkeiten:
+Die Komponenten wurden nach klar getrennten Verantwortlichkeiten aufgebaut:
 
 | Komponente | Verantwortung |
 |---|---|
 | rsyslog | zentrale Übertragung und Ablage der SSH-Logs |
-| Python Mini-SIEM | Parsing und regelbasierte Erkennung sicherheitsrelevanter Ereignisse |
-| Grafana Alloy | Sammlung und Weiterleitung der erzeugten Security Alerts |
-| Loki | Speicherung und Abfrage der Security Alerts |
-| Grafana | Visualisierung und Analyse über LogQL |
+| Python Mini-SIEM | Parsing und regelbasierte Erkennung |
+| Grafana Alloy | Sammlung und Weiterleitung der Security Alerts |
+| Loki | Speicherung und Abfrage der Alerts |
+| Grafana | Visualisierung und Analyse |
+| Vagrant | reproduzierbarer Aufbau der Umgebung |
 
-Die Detection Engine schreibt ihre Ergebnisse in eine Logdatei und besitzt keine direkte Abhängigkeit zu Loki oder Grafana. Dadurch kann die Erkennungslogik unabhängig von der Monitoring- und Visualisierungsschicht getestet und weiterentwickelt werden.
-
-Auf eine zusätzliche Datenbank oder einen weiteren Such-Stack wie Elasticsearch oder OpenSearch wurde bewusst verzichtet. Für den definierten Projektumfang reicht Loki als Logspeicher aus und reduziert gleichzeitig die Anzahl der zu installierenden und zu betreibenden Komponenten.
-
-Auch auf ein eigenes Web-Frontend wurde verzichtet. Grafana stellt die für die Projektziele benötigten Funktionen zur Abfrage und Visualisierung bereits zur Verfügung.
-
-Die Infrastruktur wird mit Vagrant und Shell-Provisionierung reproduzierbar aufgebaut. Die relevanten Konfigurationen für rsyslog, Alloy, Grafana und das Dashboard befinden sich versioniert im Repository.
-
-## Fachliche Vertiefung
-
-Das bestehende Mini-SIEM bildet die Grundlage für Parsing und regelbasierte Erkennung von SSH-Ereignissen.
-
-Im Rahmen dieser Projektarbeit wurde diese bestehende Lösung um eine zentrale Monitoring-Architektur erweitert.
-
-Die wesentlichen zusätzlichen Aspekte sind:
-
-- zentrale Übertragung von SSH-Logs zwischen getrennten Systemen mit rsyslog
-- Trennung zwischen Detection Engine und Monitoring-Pipeline
-- kontinuierliche Weiterleitung erzeugter Security Alerts mit Grafana Alloy
-- zentrale Speicherung der Security Alerts in Grafana Loki
-- Auswertung strukturierter Alert-Informationen mit LogQL
-- Visualisierung sicherheitsrelevanter Kennzahlen in Grafana
-- automatische Provisionierung der Loki-Datenquelle
-- automatische Provisionierung des Grafana-Dashboards
-- reproduzierbarer Aufbau der gesamten Umgebung mit Vagrant
-
-Damit wird die bestehende lokale Detection Engine in eine mehrstufige Security-Monitoring-Pipeline integriert, bei der Logerzeugung, Logtransport, Analyse, Alert-Weiterleitung, Speicherung und Visualisierung getrennte Aufgaben übernehmen.
-
-## Automatische Provisionierung
-
-Die Projektumgebung wird mit Vagrant reproduzierbar aufgebaut.
-
-Die Monitoring-Konfiguration befindet sich vollständig im Git-Repository. Dazu gehören unter anderem:
-
-```text
-config/alloy/config.alloy
-config/grafana/dashboards/mini-siem-security-monitoring.json
-config/grafana/provisioning/dashboards/mini-siem.yml
-config/grafana/provisioning/datasources/loki.yml
-```
+Auf eine zusätzliche Datenbank sowie einen weiteren Such-Stack wie Elasticsearch oder OpenSearch wurde bewusst verzichtet. Loki deckt die Anforderungen an Speicherung und Abfrage der erzeugten Security Alerts ab und hält die Anzahl der benötigten Komponenten gering.
 
 Die Installation und Konfiguration der Monitoring-Komponenten erfolgt über:
 
@@ -205,20 +180,21 @@ Die Installation und Konfiguration der Monitoring-Komponenten erfolgt über:
 provision/monitoring.sh
 ```
 
-Beim Aufbau der VM werden Loki, Grafana Alloy und Grafana installiert und gestartet. Zusätzlich werden die Loki-Datenquelle und das Mini-SIEM-Dashboard automatisch provisioniert.
-
-Dadurch kann die gesamte Umgebung mit folgendem Befehl aufgebaut werden:
-
-```powershell
-vagrant up
-```
-
-Ein manueller Aufbau der Grafana-Datenquelle oder des Dashboards ist nach der Provisionierung nicht erforderlich.
+Dadurch werden Loki, Grafana Alloy und Grafana sowie die Loki-Datenquelle und das Dashboard beim Aufbau der Umgebung automatisch eingerichtet.
 
 ## Datenfluss
 
-## Systemarchitektur
+Die folgende Abbildung zeigt den vollständigen technischen Datenfluss:
 
-Die folgende Abbildung zeigt die beteiligten Systeme und Komponenten.
+![Datenfluss des Mini-SIEM](screenshots/datenfluss.png)
 
-![Systemarchitektur des Mini-SIEM](screenshots/02-systemarchitektur.png)
+Ein SSH-Ereignis durchläuft dabei folgende Verarbeitungsschritte:
+
+1. Der `projekt-log-client` erzeugt ein SSH-Authentifizierungsereignis.
+2. rsyslog überträgt das Log an `projekt-mini-siem`.
+3. Der rsyslog-Server speichert das Ereignis in der zentralen SSH-Logdatei.
+4. Das Python Mini-SIEM analysiert das Ereignis anhand der Detection Rules.
+5. Ein erkannter Security Event wird in `alerts.log` geschrieben.
+6. Grafana Alloy überträgt den Alert an Loki.
+7. Grafana fragt die Daten mit LogQL aus Loki ab.
+8. Das Dashboard visualisiert die Security Alerts.
