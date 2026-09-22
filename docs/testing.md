@@ -4,16 +4,17 @@
 
 Die Projektumgebung wurde mit automatisierten Tests sowie einem vollständigen End-to-End-Test überprüft.
 
-Dabei wurde kontrolliert, dass:
+Validiert wurden:
 
-- SSH-Logs zentral übertragen werden
-- der Parser relevante SSH-Ereignisse erkennt
-- die Detection Rules Security Alerts erzeugen
-- Alerts persistent gespeichert werden
-- Grafana Alloy die Alerts an Loki überträgt
-- die Alerts über LogQL abgefragt werden können
-- Grafana die Alerts im Dashboard visualisiert
-- die Umgebung nach einem vollständigen Neuaufbau weiterhin funktioniert
+- zentrale Übertragung der SSH-Logs
+- Erkennung relevanter SSH-Ereignisse durch den Parser
+- Auslösung der definierten Detection Rules
+- persistente Speicherung erzeugter Security Alerts
+- Übertragung der Alerts durch Grafana Alloy
+- Speicherung und Abfrage der Alerts in Loki
+- Visualisierung der Alerts in Grafana
+- automatisierte Provisionierung
+- Funktionsfähigkeit nach einem vollständigen Neuaufbau
 
 ## Automatisierte Tests
 
@@ -44,7 +45,7 @@ Das Testergebnis:
 
 ## End-to-End-Test
 
-Zusätzlich zu den automatisierten Tests wurde die vollständige Verarbeitungskette mit echten SSH-Fehlversuchen getestet.
+Zusätzlich zu den automatisierten Tests wurde die vollständige Verarbeitungskette mit real erzeugten SSH-Fehlversuchen getestet.
 
 ### SSH-Fehlversuche erzeugen
 
@@ -84,13 +85,13 @@ Der folgende Screenshot zeigt einen durch die Detection Engine erkannten Securit
 
 ![Erkannter Security Alert](screenshots/03-siem-alert.png)
 
-Der erzeugte Alert wird persistent in folgender Datei gespeichert:
+Der erzeugte Alert wird unter folgendem Pfad gespeichert:
 
 ```text
 /var/log/mini-siem/alerts.log
 ```
 
-Die Alert-Einträge enthalten unter anderem:
+Die Alert-Einträge enthalten abhängig von der Detection Rule unter anderem:
 
 ```text
 timestamp
@@ -98,6 +99,7 @@ rule_id
 severity
 source_ip
 attempts
+username
 message
 ```
 
@@ -117,7 +119,7 @@ Der folgende Screenshot zeigt die in Loki verfügbaren Mini-SIEM-Alerts:
 
 ![Security Alerts in Grafana Explore](screenshots/04-grafana-explore.png)
 
-Damit wurde folgende vollständige Verarbeitungskette erfolgreich getestet:
+Damit wurde folgende Verarbeitungskette praktisch validiert:
 
 ```text
 SSH-Fehlversuch
@@ -134,12 +136,12 @@ Grafana Alloy
       ↓
 Loki
       ↓
-Grafana Dashboard
+Grafana
 ```
 
 ## Demo-Daten
 
-Für eine aussagekräftigere Visualisierung des Dashboards steht zusätzlich ein Demo-Datengenerator zur Verfügung.
+Für eine aussagekräftigere Visualisierung des Dashboards steht zusätzlich ein reproduzierbarer Demo-Datengenerator zur Verfügung.
 
 Das Skript wird auf dem Mini-SIEM mit folgendem Befehl gestartet:
 
@@ -147,7 +149,7 @@ Das Skript wird auf dem Mini-SIEM mit folgendem Befehl gestartet:
 python3 /vagrant/scripts/generate-demo-alerts.py
 ```
 
-Bei einem Durchlauf werden 120 strukturierte Demo-Alerts erzeugt.
+Ein Durchlauf erzeugt 120 strukturierte Demo-Alerts.
 
 Die Demo-Daten enthalten unterschiedliche:
 
@@ -165,7 +167,9 @@ Dabei werden die vier bestehenden Detection Rules verwendet:
 | `SIEM-SSH-003` | SUSPICIOUS | SSH-Anmeldung mit ungültigem Benutzer |
 | `SIEM-SSH-004` | HIGH | Erfolgreiche SSH-Anmeldung nach mehreren Fehlversuchen |
 
-Die Demo-Daten dienen ausschliesslich zur Visualisierung und Demonstration des Dashboards. Sie sind vom End-to-End-Test mit echten SSH-Fehlversuchen zu unterscheiden.
+Die Demo-Daten dienen ausschliesslich zur Visualisierung und Demonstration des Dashboards. Sie sind nicht als Nachweis eines realen Angriffs zu interpretieren.
+
+Der Funktionsnachweis der eigentlichen Detection Pipeline erfolgt separat über den dokumentierten End-to-End-Test mit real erzeugten SSH-Fehlversuchen.
 
 ## Grafana Dashboard
 
@@ -179,7 +183,7 @@ Das Dashboard enthält fünf Panels:
 4. Alerts by Source IP
 5. Recent Security Alerts
 
-Durch die Demo-Daten können unterschiedliche Detection Rules, Severity-Stufen und Source-IPs gleichzeitig dargestellt werden.
+Dadurch können sowohl einzelne Alert-Einträge als auch aggregierte Informationen zu Severity, Detection Rule und Source IP analysiert werden.
 
 ![Grafana Dashboard](screenshots/05-grafana-dashboard.png)
 
@@ -187,13 +191,13 @@ Durch die Demo-Daten können unterschiedliche Detection Rules, Severity-Stufen u
 
 Vor Abschluss der Projektarbeit wurde ein vollständiger Clean Build durchgeführt.
 
-Dazu wurden die beiden Projekt-VMs entfernt:
+Dazu wurden die Projekt-VMs entfernt:
 
 ```powershell
 vagrant destroy -f
 ```
 
-Anschliessend wurde die gesamte Umgebung ausschliesslich anhand der im Git-Repository vorhandenen Dateien neu aufgebaut:
+Anschliessend wurde die Umgebung ausschliesslich anhand der im Git-Repository vorhandenen Konfiguration neu aufgebaut:
 
 ```powershell
 vagrant up
@@ -212,18 +216,22 @@ Nach dem Neuaufbau wurden erneut überprüft:
 - Alert-Übertragung an Loki
 - Grafana-Dashboard
 
-Das folgende Bild zeigt die beiden laufenden Projekt-VMs nach dem Aufbau:
+Das folgende Bild zeigt die laufenden Projekt-VMs:
 
 ![Vagrant Status](screenshots/01-vagrant-status.png)
 
-Die Loki-Datenquelle und das Dashboard werden automatisch aus den im Repository enthaltenen Konfigurationsdateien provisioniert.
+Die Loki-Datenquelle und das Grafana-Dashboard wurden beim Neuaufbau automatisch aus den im Repository enthaltenen Konfigurationsdateien provisioniert.
 
-Dadurch kann die Projektumgebung mit `vagrant up` reproduzierbar aufgebaut werden.
+Damit wurde überprüft, dass die Projektumgebung reproduzierbar aufgebaut werden kann.
 
-## Bekannte Einschränkung
+## Bekannte Einschränkungen
 
-Die Detection Engine verarbeitet beim manuellen Start die vorhandene SSH-Logdatei erneut.
+Die Detection Engine arbeitet derzeit zustandslos auf der vorhandenen SSH-Logdatei.
 
-Wird die Detection Engine mehrfach gegen denselben Logbestand ausgeführt, können bereits erkannte Ereignisse erneut als Security Alert in `/var/log/mini-siem/alerts.log` geschrieben werden.
+Wird sie mehrfach gegen denselben Logbestand ausgeführt, können bereits verarbeitete Ereignisse erneut erkannt und als Security Alert in `/var/log/mini-siem/alerts.log` geschrieben werden.
 
-Für den Umfang dieser Projektarbeit wurde bewusst auf eine zusätzliche Zustandsverwaltung oder Datenbank zur Vermeidung solcher Duplikate verzichtet.
+Für den definierten Projektumfang wurde bewusst auf eine persistente Zustandsverwaltung oder zusätzliche Datenbank verzichtet. In einer produktiven SIEM-Implementierung müsste der Verarbeitungsstand beispielsweise über Offsets, Event-IDs oder eine persistente Zustandsverwaltung nachvollzogen werden.
+
+Der Demo-Datengenerator schreibt synthetische Security Alerts ebenfalls in `/var/log/mini-siem/alerts.log`. Wird das Skript mehrfach ausgeführt, werden entsprechend weitere Demo-Alerts angehängt. Dies erklärt beispielsweise eine Alert-Anzahl von mehr als 120 Einträgen im Dashboard.
+
+Die Demo-Daten dienen ausschliesslich der Demonstration und Visualisierung. Reale und synthetische Alerts werden in der aktuellen Implementierung nicht durch ein zusätzliches Herkunftslabel getrennt. Für den Projektumfang ist dies akzeptabel, da der reale End-to-End-Test separat dokumentiert und nachvollziehbar durchgeführt wurde.

@@ -1,20 +1,26 @@
 # Mini-SIEM mit Grafana Monitoring
 
-| | |
-|---|---|
-| **Autor** | Thines Rasiah |
-| **Klasse** | B-TIP-24-T-a |
-| **Modul** | Cyber Security |
-| **Dozent** | Christian Locher |
-| **Schule** | TEKO Schweizerische Fachschule Bern |
+
+**Autor:** Thines Rasiah
+
+**Klasse:** B-TIP-24-T-a
+
+**Modul:** Cyber Security
+
+**Dozent:** Christian Locher
+
+**Schule:** TEKO Schweizerische Fachschule Bern
+
 
 Dieses Projekt erweitert ein bestehendes Mini-SIEM um eine zentrale Logvisualisierung und Security-Monitoring-Lösung mit Grafana, Loki und Grafana Alloy.
 
-## Projektübersicht
+## Ziel und Umfang
 
-Das Projekt sammelt SSH-Logs eines separaten Log-Clients zentral über rsyslog. Eine Python-basierte Detection Engine analysiert die Logs anhand definierter Security-Regeln und schreibt erkannte Security Alerts in eine strukturierte Logdatei.
+Ausgangspunkt der Arbeit ist ein bestehendes Python-basiertes Mini-SIEM zur Analyse von SSH-Logs. Ziel dieser Erweiterung ist der Aufbau einer reproduzierbaren zentralen Monitoring-Pipeline für die vom Mini-SIEM erzeugten Security Alerts.
 
-Grafana Alloy überträgt diese Alerts an Loki. Grafana verwendet Loki anschliessend als Datenquelle und visualisiert die Security Alerts in einem zentralen Dashboard.
+Der Log-Client überträgt SSH-Logs zentral über rsyslog. Die Python-basierte Detection Engine analysiert die Ereignisse anhand definierter Detection Rules und schreibt erkannte Security Alerts in eine strukturierte Logdatei. Grafana Alloy übernimmt die Weiterleitung an Loki. Die Auswertung und Visualisierung erfolgt mit LogQL und Grafana.
+
+Der Fokus liegt bewusst auf der Log- und Monitoring-Pipeline. Nicht Bestandteil des Projektumfangs sind eine zusätzliche Datenbank, ein eigenes Web-Frontend, Benutzerverwaltung oder externe Benachrichtigungssysteme.
 
 ## Architektur
 
@@ -25,28 +31,11 @@ Die Umgebung besteht aus zwei Debian-VMs:
 | `projekt-mini-siem` | `192.168.56.10` | Mini-SIEM, rsyslog, Grafana Alloy, Loki und Grafana |
 | `projekt-log-client` | `192.168.56.20` | SSH-Server und rsyslog-Client |
 
-Der zentrale Datenfluss:
+Der zentrale Datenfluss vom Log-Client bis zur Visualisierung der Security Alerts:
 
-```text
-projekt-log-client
-        │
-        │ rsyslog
-        ▼
-projekt-mini-siem
-        │
-        │ Python Detection Engine
-        ▼
-Security Alerts
-        │
-        │ Grafana Alloy
-        ▼
-      Loki
-        │
-        ▼
-     Grafana
-```
+![Datenfluss des Mini-SIEM](docs/screenshots/datenfluss.png)
 
-Eine detaillierte Darstellung befindet sich in der [Architekturdokumentation](docs/architecture.md).
+Eine detaillierte Beschreibung der Architektur und der einzelnen Komponenten befindet sich in der [Architekturdokumentation](docs/architecture.md).
 
 ## Security Detection Rules
 
@@ -67,6 +56,7 @@ Das Mini-SIEM implementiert vier Detection Rules:
 - Grafana Alloy
 - Grafana Loki
 - Grafana
+- LogQL
 - Vagrant
 - VirtualBox
 - Debian Bookworm
@@ -78,6 +68,8 @@ Auf dem Host werden benötigt:
 - Git
 - Vagrant
 - VirtualBox
+
+Die innerhalb der virtuellen Maschinen benötigten Komponenten werden automatisch provisioniert.
 
 ## Quick Start
 
@@ -104,7 +96,7 @@ Nach erfolgreicher Provisionierung ist Grafana unter folgender Adresse erreichba
 
 http://192.168.56.10:3000
 
-Das Dashboard **Mini-SIEM Security Monitoring** wird automatisch provisioniert.
+Die Loki-Datenquelle und das Dashboard **Mini-SIEM Security Monitoring** werden automatisch provisioniert.
 
 ## Automatisierte Tests
 
@@ -121,7 +113,7 @@ cd /vagrant
 pytest -v
 ```
 
-Die Tests prüfen den SSH-Parser und die implementierten Detection Rules.
+Die Tests überprüfen den SSH-Parser und die implementierten Detection Rules.
 
 Aktueller Testumfang:
 
@@ -131,7 +123,7 @@ Aktueller Testumfang:
 
 ## Demo-Daten
 
-Für eine aussagekräftige Visualisierung können reproduzierbare Demo-Alerts erzeugt werden.
+Für die Visualisierung des Dashboards können reproduzierbare Demo-Alerts erzeugt werden.
 
 Innerhalb der Mini-SIEM-VM:
 
@@ -139,9 +131,9 @@ Innerhalb der Mini-SIEM-VM:
 python3 /vagrant/scripts/generate-demo-alerts.py
 ```
 
-Das Skript erzeugt 120 Demo-Alerts mit unterschiedlichen Detection Rules, Severity-Stufen und Source-IPs.
+Ein Durchlauf erzeugt 120 Demo-Alerts mit unterschiedlichen Detection Rules, Severity-Stufen und Source-IPs.
 
-Die Demo-Daten dienen ausschliesslich der Visualisierung und ersetzen nicht den durchgeführten End-to-End-Test mit echten SSH-Fehlversuchen.
+Die Demo-Daten dienen ausschliesslich der Visualisierung und Demonstration des Dashboards. Der Funktionsnachweis der Detection Pipeline erfolgt separat über einen dokumentierten End-to-End-Test mit real erzeugten SSH-Fehlversuchen.
 
 ## Dashboard
 
@@ -157,7 +149,7 @@ Das Grafana-Dashboard visualisiert:
 
 ## Dokumentation
 
-Weitere technische Informationen:
+Weiterführende technische Dokumentation:
 
 - [Architektur](docs/architecture.md)
 - [Installation und Inbetriebnahme](docs/installation.md)
